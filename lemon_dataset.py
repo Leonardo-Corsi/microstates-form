@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-Prepare EC-only LEMON EEG recordings in a Zanesco-style sensor space.
+Prepare EC and EO LEMON EEG recordings in a Zanesco-style sensor space.
 
 This script does not compute GFP, DISS, GFP peaks, microstate clusters,
-labels, or GEV. It only prepares the EC recordings for later analysis:
+labels, or GEV. It only prepares the EC and EO recordings for later analysis:
 
-1. Load preprocessed EEGLAB EC .set files.
+1. Load preprocessed EEGLAB EC and EO .set files.
 2. Keep scalp EEG channels.
 3. Add missing target channels as bad flat channels.
 4. Interpolate bad/missing channels to a 64-channel target montage.
 5. Apply average reference.
-6. Save each EC recording as FIF.
+6. Save each recording as FIF.
 7. Write recording length summaries.
 8. Exclude subjects by a selectable approximation of Zanesco's examples, or
    by a user-supplied ID list.
@@ -24,8 +24,6 @@ are transparent approximations based on the metadata table, not a guaranteed
 reconstruction of the unpublished Zanesco list.
 """
 
-from __future__ import annotations
-
 import argparse
 import re
 from pathlib import Path
@@ -33,6 +31,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import mne
+import yaml
 from tqdm import tqdm
 
 LEMON61 = [
@@ -124,11 +123,19 @@ def parse_subject_id(path: Path) -> str:
     return match.group(0)
 
 
-def find_ec_set_files(data_root: Path, recursive: bool) -> list[Path]:
-    direct = sorted(data_root.glob("*_EC*.set"))
+def find_set_files(data_root: Path, recursive: bool) -> list[Path]:
+    patterns = ["*_EC*.set", "*_EO*.set"]
+    direct = sorted(path for pattern in patterns for path in data_root.glob(pattern))
     if direct and not recursive:
         return direct
-    return sorted(data_root.glob("**/*_EC*.set"))
+    return sorted(path for pattern in patterns for path in data_root.glob(f"**/{pattern}"))
+
+
+def recording_condition(path: Path) -> str:
+    match = re.search(r"_(EC|EO)(?:[_\.]|$)", path.name, flags=re.IGNORECASE)
+    if not match:
+        raise ValueError(f"Cannot determine EC/EO condition from {path}")
+    return match.group(1).upper()
 
 
 def resolve_metadata_csv(data_root: Path, metadata_csv: Path | None) -> Path | None:
@@ -374,9 +381,11 @@ def write_ids(path: Path, ids: set[str]) -> None:
 
 
 def main() -> int:
+    with open(Path(__file__).with_name("config.yml"), encoding="utf-8") as f:
+        project_paths = yaml.safe_load(f)["paths"]
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_root", type=Path, default=Path("F:/Data/LEMON"))
-    parser.add_argument("--out", type=Path, default=Path("F:/Data/LEMON/vetted"))
+    parser.add_argument("--data_root", type=Path, default=Path(project_paths["lemon_root"]))
+    parser.add_argument("--out", type=Path, default=Path(project_paths["data_root"]))
     parser.add_argument("--metadata_csv", type=Path, default=None)
     parser.add_argument(
         "--exclude_ids",
@@ -412,51 +421,56 @@ def main() -> int:
             f.write(ch + "\n")
     export_sxyz(target_chs, args.out / "montage" / f"{args.target64}.sxyz")
 
-    ec_files = find_ec_set_files(args.data_root, args.recursive)
+    set_files = find_set_files(args.data_root, args.recursive)
 
     rows = []
     skipped = []
-    for path in tqdm(ec_files, desc="Processing EC files"):
+    for path in tqdm(set_files, desc="Processing EC/EO files"):
         subject = parse_subject_id(path)
+        condition = recording_condition(path)
         if subject in exclude_ids:
             skipped.append({
                 "subject": subject,
+                "condition": condition,
                 "input_file": str(path),
                 "reason": exclusion_label,
             })
             continue
-        out_fif = args.out / "fif_ec_64avgref" / f"{subject}_EC_64avgref_raw.fif"
+        out_fif = (
+            args.out / f"fif_{condition.lower()}_64avgref"
+            / f"{subject}_{condition}_64avgref_raw.fif"
+        )
         if args.dry_run:
             rows.append({
                 "subject": subject,
+                "condition": condition,
                 "input_file": str(path),
                 "output_file": str(out_fif),
                 "dry_run": True,
             })
         else:
-            rows.append(process_one(path, out_fif, target_chs))
+            row = process_one(path, out_fif, target_chs)
+            row["condition"] = condition
+            rows.append(row)
 
     pd.DataFrame(rows).to_csv(summary_dir / "recording_summary.csv", index=False)
     pd.DataFrame(skipped).to_csv(summary_dir / "excluded_subjects_applied.csv", index=False)
 
     if rows and not args.dry_run and "duration_min" in rows[0]:
-        durations = pd.Series([r["duration_min"] for r in rows], dtype=float)
-        dur_summary = pd.DataFrame([
-            {
-                "condition": "EC",
-                "n_recordings": int(durations.notna().sum()),
-                "mean_duration_min": float(durations.mean()),
-                "sd_duration_min_sample": float(durations.std(ddof=1)),
-                "min_duration_min": float(durations.min()),
-                "max_duration_min": float(durations.max()),
-            }
-        ])
+        durations = pd.DataFrame(rows).groupby("condition")["duration_min"]
+        dur_summary = durations.agg(
+            n_recordings="count",
+            mean_duration_min="mean",
+            sd_duration_min_sample="std",
+            min_duration_min="min",
+            max_duration_min="max",
+        ).reset_index()
         dur_summary.to_csv(summary_dir / "duration_summary.csv", index=False)
 
-    print(f"Found EC files: {len(ec_files)}")
+    print(f"Found EC/EO files: {len(set_files)}")
     print(f"Exclusion mode: {args.exclusion_mode}")
     print(f"Requested exclusions: {len(exclude_ids)}")
-    print(f"Excluded matching EC files: {len(skipped)}")
+    print(f"Excluded matching EC/EO files: {len(skipped)}")
     print(f"Processed or listed: {len(rows)}")
     print(f"Metadata CSV: {args.metadata_csv if args.metadata_csv is not None else 'not found'}")
     print(f"Output: {args.out}")

@@ -1,0 +1,5 @@
+paths:
+  # Edit these three paths once to relocate the project data and all results.
+  lemon_root: E:/LEMON
+  data_root: E:/LEMON/vetted
+  results_root: E:/LEMON/results

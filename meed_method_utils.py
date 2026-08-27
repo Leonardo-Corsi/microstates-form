@@ -1185,6 +1185,44 @@ def plot_dipole_sphere(B, labels, fixed_df, S, elev=60, azim=140):
     return fig
 
 
+def plot_full_dipole_sphere(B, labels, full_df, S, elev=60, azim=140):
+    """Plot each full-dipole fit with its moment arrow at the fitted location."""
+    M = B.shape[1]
+    cols = min(M, 2)
+    rows = int(math.ceil(M / cols))
+    fig = plt.figure(figsize=(4.2 * cols, 4.0 * rows))
+    norm = Normalize(vmin=-0.65, vmax=0.65)
+    cmap = plt.get_cmap("RdBu_r")
+
+    for i in range(M):
+        row = full_df.iloc[i]
+        location = np.array([row["loc_x"], row["loc_y"], row["loc_z"]], dtype=float)
+        moment = np.array(
+            [row["moment_x"], row["moment_y"], row["moment_z"]], dtype=float,
+        )
+        ax = fig.add_subplot(rows, cols, i + 1, projection="3d")
+        XS, YS, ZS, V = sphere_values(S, B[:, i])
+        fc = cmap(norm(V))
+        fc[..., -1] = 0.30
+        ax.plot_surface(XS, YS, ZS, facecolors=fc, linewidth=0.15, edgecolor=(0, 0, 0, 0.10), antialiased=True, shade=False)
+        draw_plane(ax)
+        ax.scatter(S[:, 0], S[:, 1], S[:, 2], c=B[:, i], cmap="RdBu_r", vmin=-0.65, vmax=0.65, s=18, edgecolor="black", linewidth=0.2, depthshade=False)
+        ax.scatter(*location, s=40, c="black", depthshade=False)
+        ax.quiver(*location, *moment, length=0.55, normalize=True, linewidth=2.2, color="black", arrow_length_ratio=0.20)
+        ax.set_title(
+            f"{labels[i]}\nlocation=({location[0]:.2f}, {location[1]:.2f}, {location[2]:.2f})",
+            fontsize=8,
+        )
+        ax.view_init(elev=elev, azim=azim)
+        ax.set_xlim(-1.18, 1.18)
+        ax.set_ylim(-1.18, 1.18)
+        ax.set_zlim(-0.18, 1.05)
+        ax.set_box_aspect([1, 1, 0.65])
+        ax.set_axis_off()
+    fig.tight_layout()
+    return fig
+
+
 def plot_jackknife_stability(jack_df):
     fig, ax = plt.subplots(figsize=(6.8, 4.3))
     labels = (
@@ -1958,6 +1996,98 @@ def plot_reconstruction_spiders_all_m(r2_all):
     handles, labels_legend = ax.get_legend_handles_labels()
     fig.legend(handles, labels_legend, loc="upper right")
     fig.suptitle("Reconstruction quality across all map counts", fontsize=12)
+    return fig
+
+
+def plot_reconstruction_spiders_with_metamaps_all_m(ds, r2_all):
+    """Show each solution's R2 spider beside its maps and MEED reconstruction.
+
+    Parameters
+    ----------
+    ds : dict
+        Dataset returned by ``load_microstates``; its ``all_sets`` entries define
+        the solutions and their manual map ordering.
+    r2_all : pandas.DataFrame
+        Output of ``reconstruction_quality_all_m(ds["all_sets"], ...)``.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        A ``2 * n_solutions`` by ``(2 * max_k + 2)`` panel grid.  The first two
+        columns contain one spider plot spanning the two rows of each solution;
+        the remaining columns contain original maps above their fixed-MEED
+        reconstructions.
+    """
+    all_sets = ds["all_sets"]
+    n_solutions = len(all_sets)
+    if n_solutions == 0:
+        raise ValueError("ds['all_sets'] must contain at least one solution")
+
+    max_k = max(len(entry["Maps"]) for entry in all_sets)
+    reconstructed = []
+    for entry in all_sets:
+        B = center_l2_cols(np.asarray(entry["Maps"], dtype=float).T)
+        info = make_info_from_entry(entry)
+        geom = sensor_geometry(info)
+        _, _, B_meed, _ = project_fixed_dipole(B, geom["S_orth"])
+        reconstructed.append((B, B_meed, info))
+
+    vmax = max(
+        1e-12,
+        float(max(np.max(np.abs(mat)) for B, B_meed, _ in reconstructed for mat in (B, B_meed))),
+    )
+    fig = plt.figure(
+        figsize=(2.35 * (max_k + 1), 2.55 * n_solutions),
+        constrained_layout=True,
+    )
+    grid = fig.add_gridspec(2 * n_solutions, 2 * max_k + 2)
+
+    for solution_index, entry in enumerate(all_sets):
+        k = len(entry["Maps"])
+        labels = entry.get("Labels", list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")[:k])
+        B, B_meed, info = reconstructed[solution_index]
+        grid_row = 2 * solution_index
+
+        # The spider occupies the first 2 x 2 block for this solution.
+        ax_spider = fig.add_subplot(grid[grid_row:grid_row + 2, :2], projection="polar")
+        dM = r2_all[r2_all["M"] == k]
+        spider_labels = list(dM.sort_values("map_index")["label"].drop_duplicates())
+        theta = np.linspace(0, 2 * np.pi, len(spider_labels), endpoint=False)
+        theta_closed = np.r_[theta, theta[0]]
+        for representation in dM["representation"].unique():
+            d_representation = dM[dM["representation"] == representation]
+            values = np.asarray([
+                float(d_representation.loc[d_representation["label"] == label, "R2"].iloc[0])
+                for label in spider_labels
+            ])
+            if representation == "fixed_MEED":
+                ax_spider.plot(theta_closed, np.r_[values, values[0]], linestyle='--', marker="d", markerfacecolor="none", label=representation, zorder=3)
+            else:
+                ax_spider.plot(theta_closed, np.r_[values, values[0]], marker="o", label=representation)
+
+
+        ax_spider.set_xticks(theta)
+        ax_spider.set_xticklabels(spider_labels, fontsize=8)
+        ax_spider.set_ylim(0.75, 1.0)
+        ax_spider.set_yticks([0.9, 0.95, 1.0])
+        if solution_index == 0:
+            ax_spider.legend(loc="upper left", bbox_to_anchor=(1.05, 1.15), fontsize=8)
+
+        for map_index, label in enumerate(labels):
+            col_start = 2 + 2 * map_index
+            panels = [
+                (grid_row, "original", B[:, map_index]),
+                (grid_row + 1, "fixed MEED", align_polarity(B[:, map_index], B_meed[:, map_index])),
+            ]
+            for row, row_name, values in panels:
+                ax = fig.add_subplot(grid[row, col_start:col_start + 2])
+                mne.viz.plot_topomap(
+                    values, info, axes=ax, show=False, contours=4, sensors=False,
+                    cmap="RdBu_r", vlim=(-vmax, vmax), sphere="auto",
+                    extrapolate="head", image_interp="linear",
+                )
+
+    fig.suptitle("Reconstruction quality, microstates, and fixed-MEED reconstructions", fontsize=13)
     return fig
 
 

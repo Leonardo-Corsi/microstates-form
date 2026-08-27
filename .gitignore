@@ -1,1 +1,17 @@
-.vscode
+.vscode/
+legacy/
+
+# Python and Jupyter runtime artifacts
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Generated analysis outputs
+results-*/
+meed_*.svg
+
+# Local EEG data, MATLAB exports, and downloaded archives
+*.edf
+*.fif
+*.set
+*.zip

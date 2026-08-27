@@ -27,15 +27,19 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
+import yaml
 
 import utils_realdata_A_v1 as ua
 
 warnings.filterwarnings("ignore")
 plt.rcParams["figure.dpi"] = 120
 
-DATA_ROOT = Path("F:/Data/LEMON/vetted")
+with open(Path(__file__).with_name("config.yml"), encoding="utf-8") as f:
+    PROJECT_PATHS = yaml.safe_load(f)["paths"]
+
+DATA_ROOT = Path(PROJECT_PATHS["data_root"])
 JSON_PATH = Path("metamaps_export_lemon.json")
-OUTDIR = Path("results-realdata-A")
+OUTDIR = Path(PROJECT_PATHS["results_root"]) / "results-realdata-A"
 FIF_OR_EDF = 'FIF'  # Change to 'FIF' if using .fif files
 
 BASE_K = 4

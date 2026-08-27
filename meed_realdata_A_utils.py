@@ -971,6 +971,7 @@ def plot_item1D_low_high_f_examples(raw: mne.io.BaseRaw, sample_df: pd.DataFrame
                     contours=0,
                     sensors=True,
                     res=64,
+                    extrapolate="local",
                 )
                 if label == "t":
                     ax.set_title(
@@ -1114,6 +1115,7 @@ def plot_exemplary_f_meed_transition_pairs(raw: mne.io.BaseRaw, sample_df: pd.Da
                     contours=0,
                     sensors=True,
                     res=64,
+                    extrapolate="local",
                 )
                 if lbl == "t":
                     ax.set_title(
@@ -1222,6 +1224,7 @@ def plot_exemplary_gfp_rho_maxcorr_cases(raw: mne.io.BaseRaw, sample_df: pd.Data
                 contours=6,
                 sensors=True,
                 res=48,
+                extrapolate="local",
             )
             ax.set_title(
                 f"s={idx} t={float(row['time']):.1f}\nzg={float(row['z_gfp']):.1f} zr={float(row['z_rho']):.1f} zm={float(row['z_maxcorr']):.1f}",
@@ -2523,6 +2526,7 @@ def plot_group_item3D_group_exemplar_topomaps(selected_df: pd.DataFrame):
                 contours=0,
                 sensors=True,
                 res=64,
+                extrapolate="local",
             )
             ax.set_title(
                 (
