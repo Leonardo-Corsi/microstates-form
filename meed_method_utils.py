@@ -2631,3 +2631,40 @@ def plot_null_exemplary_maps_by_fixed_r2(null_maps_df, info, rows=7, cols_per_ki
         fontsize=12,
     )
     return fig
+
+
+def save_previous_literature_outputs(mat_file, outdir, k=4, azim=170.2980, elev=-1.4568):
+    """Save and display the previous-literature MEED analyses for one MAT file.
+
+    The MAT file is the only input to this block.  All generated SVG files are
+    written to ``outdir`` and the linked 3D dipole comparison is opened for all
+    available meta-cluster solutions.
+    """
+    import meed_previousliteraturedata as previous
+
+    mat_file = Path(mat_file)
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    distmat = previous.load_distmat(mat_file)
+    cluster_parameters = distmat["ClusterMaps"]["msinfo"]["ClustPar"]
+    min_k = int(cluster_parameters["MinClasses"])
+    max_k = int(cluster_parameters["MaxClasses"])
+    if not min_k <= k <= max_k:
+        raise ValueError(f"Available previous-literature solutions: {min_k}..{max_k}")
+
+    output_paths = {
+        "meed_mds": outdir / f"meed_vs_mds_K{k}.svg",
+        "topomap_layout": outdir / "meed_topomap_layout.svg",
+        "topomap_angle_grid": outdir / "meed_topomap_angle_grid.svg",
+    }
+    previous.plot_meed_mds(distmat, k, output_paths["meed_mds"], azim, elev)
+    previous.plot_topomap_layout(distmat, output_paths["topomap_layout"], k)
+    previous.plot_topomap_angle_grid(distmat, output_paths["topomap_angle_grid"])
+    previous.plot_dipole_3d_solutions(
+        distmat,
+        list(range(min_k, max_k + 1)),
+        azim,
+        elev,
+    )
+    return output_paths
