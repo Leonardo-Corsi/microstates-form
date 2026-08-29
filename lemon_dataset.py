@@ -28,9 +28,9 @@ import argparse
 import re
 from pathlib import Path
 
+import mne
 import numpy as np
 import pandas as pd
-import mne
 import yaml
 from tqdm import tqdm
 
@@ -376,8 +376,7 @@ def process_one(path: Path, out_fif: Path, target_chs: list[str]) -> dict:
 def write_ids(path: Path, ids: set[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
-        for subject in sorted(ids):
-            f.write(subject + "\n")
+        f.writelines(subject + "\n" for subject in sorted(ids))
 
 
 def main() -> int:
@@ -417,8 +416,7 @@ def main() -> int:
 
     target_chs = TARGETS[args.target64]
     with open(summary_dir / "target64_channels.txt", "w", encoding="utf-8") as f:
-        for ch in target_chs:
-            f.write(ch + "\n")
+        f.writelines(ch + "\n" for ch in target_chs)
     export_sxyz(target_chs, args.out / "montage" / f"{args.target64}.sxyz")
 
     set_files = find_set_files(args.data_root, args.recursive)

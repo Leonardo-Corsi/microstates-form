@@ -17,19 +17,19 @@ Start with MAX_SUBJECTS = 1. Increase only after inspecting the first outputs.
 """
 
 import argparse
-from glob import glob
-from pathlib import Path
+import os
 import re
 import warnings
+from glob import glob
+from pathlib import Path
 
-import os
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
+import utils_realdata_A_v1 as ua  # type: ignore
 import yaml
-
-import utils_realdata_A_v1 as ua
 
 warnings.filterwarnings("ignore")
 plt.rcParams["figure.dpi"] = 120
@@ -125,7 +125,7 @@ def process_subject(eeg_path: Path, template_ch_names: list[str], *, write_exemp
 
     analysis_df = sample_df.copy()
     if TIME_WINDOW is not None:
-        t0, t1 = TIME_WINDOW
+        _t0, _t1 = TIME_WINDOW
         analysis_df = sample_df.query("@t0 <= time <= @t1").copy()
     analysis_csv = sample_csv
 
@@ -167,7 +167,7 @@ def main():
 
     OUTDIR.mkdir(parents=True, exist_ok=True)
 
-    meta4, template_ch_names = ua.load_meta_level(JSON_PATH, BASE_K)
+    _meta4, template_ch_names = ua.load_meta_level(JSON_PATH, BASE_K)
 
     fmt = str(FIF_OR_EDF).strip().lower()
     if fmt not in {"fif", "edf"}:
