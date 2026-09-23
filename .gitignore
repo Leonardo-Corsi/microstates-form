@@ -1,17 +1,19 @@
 .vscode/
-legacy/
 
-# Python and Jupyter runtime artifacts
+# Python runtime artifacts
 __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
 
-# Generated analysis outputs
-results-*/
-meed_*.svg
+# Also ignore inputs/outputs if placed inside the checkout.
+results/
+LEMON/
+.venv/
 
-# Local EEG data, MATLAB exports, and downloaded archives
+# Separately obtained EEG inputs and downloaded archives
 *.edf
 *.fif
+*.fif.gz
 *.set
+*.fdt
 *.zip

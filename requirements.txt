@@ -1,0 +1,14 @@
+numpy
+scipy
+pandas
+mne
+pycrostates==0.6.1
+joblib
+threadpoolctl
+tqdm
+psutil
+matplotlib
+scikit-learn
+statsmodels
+pyyaml
+seaborn

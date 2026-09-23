@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite the accompanying FORM manuscript and this software repository."
+title: "FORM microstate analysis"
+type: software
+authors:
+  - family-names: "Corsi"
+    given-names: "Leonardo"
+  - family-names: "Liuzzi"
+    given-names: "Piergiuseppe"
+  - family-names: "Oddo"
+    given-names: "Calogero Maria"
+  - family-names: "Mannini"
+    given-names: "Andrea"
+date-released: 2026-09-23
+repository-code: "https://github.com/Leonardo-Corsi/microstate-form"

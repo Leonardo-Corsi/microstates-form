@@ -8,7 +8,7 @@ labels, or GEV. It only prepares the EC and EO recordings for later analysis:
 1. Load preprocessed EEGLAB EC and EO .set files.
 2. Keep scalp EEG channels.
 3. Add missing target channels as bad flat channels.
-4. Interpolate bad/missing channels to a 64-channel target montage.
+4. Interpolate bad/missing channels onto the fixed target channel list.
 5. Apply average reference.
 6. Save each recording as FIF.
 7. Write recording length summaries.
@@ -52,9 +52,10 @@ LEMON61 = [
     "Iz",
 ]
 
-# A defensible 64-channel target when starting from LEMON61 and using 10-20
-# style coordinates. The paper reports 64 channels but does not list the labels.
-LEMON_PLUS64 = [
+# Fixed interpolation target for this Zanesco (2020)-style LEMON analysis.
+# LEMON61 plus Fpz and FCz gives 63 channels. This is our explicit target,
+# not a reconstruction of an unpublished 64-channel list.
+LEMON_TARGET_CHANNELS = [
     "Fp1", "Fpz", "Fp2",
     "AF7", "AF3", "AF4", "AF8",
     "F7", "F5", "F3", "F1", "Fz", "F2", "F4", "F6", "F8",
@@ -78,7 +79,7 @@ BIOSEMI64 = [
 ]
 
 TARGETS = {
-    "lemon_plus64": LEMON_PLUS64,
+    "lemon": LEMON_TARGET_CHANNELS,
     "biosemi64": BIOSEMI64,
 }
 
@@ -380,11 +381,12 @@ def write_ids(path: Path, ids: set[str]) -> None:
 
 
 def main() -> int:
-    with open(Path(__file__).with_name("config.yml"), encoding="utf-8") as f:
-        project_paths = yaml.safe_load(f)["paths"]
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--data_root", type=Path, default=Path(project_paths["lemon_root"]))
-    parser.add_argument("--out", type=Path, default=Path(project_paths["data_root"]))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", type=Path, default=Path(__file__).with_name("config.yml"))
+    parser.add_argument("--data_root", type=Path, default=None,
+                        help="Downloaded EEGLAB files; defaults to lemon_root in config or the parent of data_root.")
+    parser.add_argument("--out", type=Path, default=None,
+                        help="Prepared FIF directory; defaults to data_root in config.")
     parser.add_argument("--metadata_csv", type=Path, default=None)
     parser.add_argument(
         "--exclude_ids",
@@ -398,10 +400,34 @@ def main() -> int:
         default="broad_substance_or_hallucination",
         help="Default removes the 13-subject broader substance/hallucination set.",
     )
-    parser.add_argument("--target64", choices=sorted(TARGETS), default="lemon_plus64")
+    parser.add_argument("--target_montage", "--target64", dest="target_montage",
+                        choices=[*TARGETS, "lemon_plus64"], default="lemon",
+                        help="Fixed target: lemon (63 channels) or biosemi64. "
+                             "--target64 and lemon_plus64 are legacy aliases.")
     parser.add_argument("--recursive", action="store_true")
     parser.add_argument("--dry_run", action="store_true")
     args = parser.parse_args()
+
+    # Read the flat project config only after argument parsing, so --help
+    # does not require a config file or access to the EEG directory.
+    try:
+        with args.config.open(encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+        if not isinstance(config, dict):
+            raise ValueError("config must contain a mapping")
+        config_dir = args.config.resolve().parent
+        if args.out is None:
+            args.out = config_dir / Path(config["data_root"])
+        if args.data_root is None:
+            args.data_root = config_dir / Path(config.get("lemon_root", Path(config["data_root"]).parent))
+        if args.metadata_csv is None and config.get("metadata_csv"):
+            metadata = config_dir / Path(config["metadata_csv"])
+            if metadata.is_file():
+                args.metadata_csv = metadata
+    except (OSError, KeyError, TypeError, ValueError, yaml.YAMLError) as error:
+        parser.error(f"Cannot load preparation paths from {args.config}: {error}")
+    if args.target_montage == "lemon_plus64":
+        args.target_montage = "lemon"
 
     args.out.mkdir(parents=True, exist_ok=True)
     summary_dir = args.out / "summary"
@@ -414,10 +440,10 @@ def main() -> int:
     exclude_ids, exclusion_label = get_exclusion_ids(args.exclusion_mode, args.exclude_ids)
     write_ids(summary_dir / "excluded_subject_ids_requested.txt", exclude_ids)
 
-    target_chs = TARGETS[args.target64]
-    with open(summary_dir / "target64_channels.txt", "w", encoding="utf-8") as f:
+    target_chs = TARGETS[args.target_montage]
+    with open(summary_dir / "target_channels.txt", "w", encoding="utf-8") as f:
         f.writelines(ch + "\n" for ch in target_chs)
-    export_sxyz(target_chs, args.out / "montage" / f"{args.target64}.sxyz")
+    export_sxyz(target_chs, args.out / "montage" / f"{args.target_montage}.sxyz")
 
     set_files = find_set_files(args.data_root, args.recursive)
 
@@ -435,9 +461,19 @@ def main() -> int:
             })
             continue
         out_fif = (
+            args.out / f"fif_{condition.lower()}_avgref"
+            / f"{subject}_{condition}_avgref_raw.fif"
+        )
+        # Reuse historical paths when present rather than creating a second
+        # FIF for the same subject-condition in an existing analysis tree.
+        legacy_fif = (
             args.out / f"fif_{condition.lower()}_64avgref"
             / f"{subject}_{condition}_64avgref_raw.fif"
         )
+        if legacy_fif.exists():
+            if out_fif.exists():
+                raise FileExistsError(f"Duplicate prepared recordings: {out_fif} and {legacy_fif}")
+            out_fif = legacy_fif
         if args.dry_run:
             rows.append({
                 "subject": subject,
@@ -465,6 +501,7 @@ def main() -> int:
         ).reset_index()
         dur_summary.to_csv(summary_dir / "duration_summary.csv", index=False)
 
+    print(f"Target montage: {args.target_montage} ({len(target_chs)} channels)")
     print(f"Found EC/EO files: {len(set_files)}")
     print(f"Exclusion mode: {args.exclusion_mode}")
     print(f"Requested exclusions: {len(exclude_ids)}")
