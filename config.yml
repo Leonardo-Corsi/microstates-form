@@ -1,81 +1,83 @@
-# Shared configuration for the integrated real-data and effects pipeline.
-data_root: /media/airlab/870EVOPT2/meed/LEMON/vetted
-output_root: /media/airlab/870EVOPT2/meed/LEMON/results/results-meed-validation-30
+data_root: ../LEMON/vetted
+output_root: ../results
 meta_json: metamaps_export_lemon.json
-metadata_csv: ""
-preclustering_exclude_ids: ""
-
+metadata_csv: ../LEMON/Behavioural_Data_MPILMBB_LEMON/META_File_IDs_Age_Gender_Education_Drug_Smoke_SKID_LEMON.csv
+preclustering_exclude_ids: preclustering_exclude_ids.txt
 input_layout: auto
 interleaved_block_seconds: 60.0
 interleaved_n_blocks: 16
 interleaved_first_condition: EC
-fif_glob: "**/*.fif"
-subject_regex: "(?i)(sub-[A-Za-z0-9]+)"
-condition_regex: "(?i)(?:^|[^A-Za-z0-9])(EC|EO)(?:[^A-Za-z0-9]|$)"
+fif_glob: '**/*.fif'
+subject_regex: (?i)(sub-[A-Za-z0-9]+)
+condition_regex: (?i)(?:^|[^A-Za-z0-9])(EC|EO)(?:[^A-Za-z0-9]|$)
 require_both_conditions: true
-max_subjects: 0  # full cohort
+max_subjects: 0
 sfreq_expected: 250.0
 sfreq_tolerance: 0.01
-ram_monitor_interval_seconds: 10.0
+ram_monitor_interval_seconds: 300.0
 random_seed: 20260827
 overwrite: false
-
-a_cache:
-  n_jobs_recordings: 1
-  n_jobs_fits: 1
-  n_jobs_clustering: 17
+a_subject_level:
+  n_jobs_tasks: 10
+  n_jobs_clustering: 1
+  n_jobs_finalization: 10
+  subject_reference_k: 5
   k_min: 1
   k_max: 12
   n_init: 100
   max_iter: 300
-  tol: 1.0e-6
+  tol: 1.0e-06
   min_peak_distance: 1
   criteria_corr_threshold: 0.5
   criteria_min_k: 4
   criteria_max_maps: 2500
   criteria_max_pairs: 200000
-
-b_descriptive:
-  n_jobs_recordings: 12
-  base_k: 4
+  block_seconds: 60.0
+  expected_blocks_per_condition: 8
+  annotation_boundary_regex: (?i)(boundary|block|segment|break|new.*segment)
+  chunk_samples: 250000
+d_descriptive:
+  n_jobs_recordings: 10
+  base_k: 5
   map_k_min: 4
   map_k_max: 8
   time_start_s: 0.0
   time_end_s: 3600.0
-  write_exemplary_plots: false
+  write_exemplary_plots: true
+  # True rebuilds numerical/table leaves. False reuses valid caches.
+  recompute: false
+  # Redraw rho-ceiling Figure 4 leaves from cached numerical outputs without recomputing them.
+  refresh_figures_subjects: true
+  refresh_figures_group: true
+  write_recording_outputs: true
   write_subject_outputs: true
   write_group_outputs: true
-
-c_group_level:
+  spatial_lmax: 8
+  beta1_plot_rows: 500
+  group_k_values:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+b_group_level:
   k_min: 1
   k_max: 15
   n_init: 200
   max_iter: 300
-  tol: 1.0e-6
-  n_jobs_clustering: 3
+  tol: 1.0e-06
+  n_jobs_clustering: 10
   selected_k: 5
   criteria_corr_threshold: 0.5
   criteria_min_k: 4
   criteria_max_maps: 5000
   criteria_max_pairs: 300000
-
-d_backfit:
-  n_jobs_recordings: 12
-  block_seconds: 60.0
-  expected_blocks_per_condition: 8
-  annotation_boundary_regex: "(?i)(boundary|block|segment|break|new.*segment)"
-  chunk_samples: 250000
-
-e_evaluation:
-  n_jobs_recordings: 12
-  corr_threshold: 0.5
-  rho2_threshold: 0.5
-  min_segment_samples: 6
-  transition_max_gap_samples: 5
-  transition_permutations: 10000
-  transition_permutation_seed: 20260829
-  max_unassigned_fraction: 0.45
-  young_max_age: 35.0
-  older_min_age: 59.0
-  bootstrap_iterations: 2000
-  bootstrap_seed: 20260828
+c_backfit:
+  n_jobs_recordings: 10
